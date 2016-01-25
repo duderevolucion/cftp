@@ -8,23 +8,23 @@ import sys
 
 
 #########################################################
-# Exceptions raised by cftp
+# Exceptions raised by BaseFtpClient
 #########################################################
 
 
-class CFTPError(Exception) :
+class BaseFTPError(Exception) :
     """Gracefully handle unanticipated errors."""
 
     def errorLog(self):
-        sys.stderr.write( 'General CFTP error\n' )
+        sys.stderr.write( 'General BaseFTP error\n' )
 
-class CFTPInvalidCloudLocation(Exception) :
+class BaseFTPInvalidCloudLocation(Exception) :
     """Attempt to access an invalid cloud location."""
 
     def errorLog(self):
         sys.stderr.write( 'Invalid location\n' )
 
-class CFTPInvalidCommand(Exception) :
+class BaseFTPInvalidCommand(Exception) :
     """User entered an invalid ftp command."""
 
     def errorLog(self):

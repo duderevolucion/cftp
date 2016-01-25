@@ -1,7 +1,7 @@
 #!/usr/local/bin/python3
 import sys
 import os
-import cftp_exceptions as cftp_ex
+import cftp.base_exceptions as bftp_ex
 from abc import ABCMeta, abstractmethod 
 
 
@@ -10,7 +10,7 @@ from abc import ABCMeta, abstractmethod
 # Author:  Dude Revolucion (dudrevolucion@gmail.com)
 
 
-class CFtpClient :
+class BaseFtpClient :
 
     """Emulates basic ftp client functionality to access cloud storage (abstract class).
 
@@ -65,10 +65,10 @@ class CFtpClient :
         Raises: 
             OSError:  A standard python exception indicating an operating
                 system-related exception.
-            CFTPInvalidCloudLocation:  Attempt to access an invalid
+            BaseFtpInvalidCloudLocation:  Attempt to access an invalid
                 cloud location.
-            CFTPInvalidCommand:  User entered an invalid ftp command.
-            CFTPError:  Gracefully handle unanticipated errors.
+            BaseFtpInvalidCommand:  User entered an invalid ftp command.
+            BaseFtpError:  Gracefully handle unanticipated errors.
 
         """
 
@@ -82,15 +82,15 @@ class CFtpClient :
                 print( "OSError:  " + osErr.strerror + " " + osErr.filename )
                 sys.exit(1)
 
-            except cftp_ex.CFTPInvalidCloudLocation as e :
+            except bftp_ex.BaseFTPInvalidCloudLocation as e :
                 e.errorLog()
                 args[0].CommandLine()
 
-            except cftp_ex.CFTPInvalidCommand as e :
+            except bftp_ex.BaseFTPInvalidCommand as e :
                 e.errorLog()
                 args[0].CommandLine()
 
-            except cftp_ex.CFTPError as e :
+            except bftp_ex.BaseFTPError as e :
                 e.errorLog()
                 args[0].CommandLine()
 
@@ -368,18 +368,18 @@ class CFtpClient :
                 continue
             if self.cloudStorageLocation==None and \
                not line[0] in notNeedValidCloudLocation :
-                raise cftp_ex.CFTPInvalidCloudLocation
+                raise bftp_ex.BaseFTPInvalidCloudLocation
             if ftpCmdFctLookupNoArgs.get( line[0] ) != None :
                 rVal = ftpCmdFctLookupNoArgs[ line[0] ]()
             elif ftpCmdFctLookupOneArg.get( line[0] ) != None :
                 if len(line) == 2 :
                     rVal = ftpCmdFctLookupOneArg[ line[0] ](line[1])
                 else :
-                    raise cftp_ex.CFTPInvalidCloudLocation
+                    raise bftp_ex.BaseFTPInvalidCloudLocation
             elif ftpCmdFctLookupMultipleArgs.get( line[0] ) != None :
                 rVal = ftpCmdFctLookupMultipleArgs[ line[0] ](line[1:])
             else :
-                raise cftp_ex.CFTPInvalidCommand
+                raise bftp_ex.BaseFTPInvalidCommand
             if rVal :
                 print( rVal )
             

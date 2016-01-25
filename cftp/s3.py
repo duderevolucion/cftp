@@ -3,8 +3,8 @@ import sys
 import boto3
 import os.path, glob, fnmatch
 from abc import ABCMeta, abstractmethod
-from cftp import CFtpClient
-import s3ftp_exceptions as s3e
+from cftp.base import BaseFtpClient
+import cftp.s3_exceptions as s3e
 from boto3.s3.transfer import S3Transfer
 
 
@@ -13,7 +13,7 @@ from boto3.s3.transfer import S3Transfer
 # Author:  Dude Revolucion (dudrevolucion@gmail.com)
 
 
-class S3FtpClient(CFtpClient) :
+class S3FtpClient(BaseFtpClient) :
     """Emulates basic ftp client functionality to access Amazon S3 cloud storage.
 
     This class implements the CFtpClient abstract class in order to provide
@@ -23,7 +23,7 @@ class S3FtpClient(CFtpClient) :
     and interactively (via the command line).  Instance methods in this class
     implement the commands. 
 
-    Recall the superclass (CFtpClient) has three instance attributes.
+    Recall the superclass (BaseFtpClient) has three instance attributes.
     In this subclass, cloudStorageLocation is a string that refers to
     the location of the Amazon S3 bucket.  The remoteWorkingDir attribute
     refers to a location within that bucket.  It can either be a directory
