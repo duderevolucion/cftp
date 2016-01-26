@@ -21,6 +21,7 @@ noted below.
 2.  base_exceptions.py - exceptions raised by base.py
 3.  s3.py - ftp-like client interface to Amazon's S3 service
 4.  s3_exceptions.py - exceptions raised by s3.py
+5.  __main__.py - shim for s3ftp command line script (console script)
 
 Over time, this package may be extended to include an
 ftp-like client interface to the DropBox storage services.  That
@@ -38,6 +39,10 @@ AWS objects using python.  The boto3 package will be automatically
 installed (via pip or easy_install), since it is listed as a
 dependency in this package.
 
+This package also includes a tool called *s3ftp* that provides 
+command line, ftp-like access to the Amazon S3 service.
+
+
 
 Configuration
 =============
@@ -47,5 +52,23 @@ credentials as required by boto3.  See the following URL:
 
 https://boto3.readthedocs.org/en/latest/guide/quickstart.html#configuration
 
+
+Note
+====
+
+The Amazon S3 client above does not support creation or deletion
+of S3 buckets.  It assumes the bucket already exists.  This is
+consistent with behavior of a traditional ftp client in that it
+is accessing existing storage (on an ftp server).
+
+
+Changes in this Release
+=======================
+
+(1) Added clarification in README file to indicate no support
+for creating or deleting S3 buckets.
+
+(2) Added a console script to provide an ftp-like interface
+to Amazon S3 on the command line.
 
 

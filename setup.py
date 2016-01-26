@@ -6,13 +6,18 @@ def readme():
 
 
 setup(name='cftp',
-      version='0.1b',
+      version='0.1c',
       description='FTP-like client for interacting with cloud storage',
       url='http://github.com/duderevolucion/cftp',
       author='Dude Revolucion',
       author_email='duderevolucion@gmail.com',
       license='GNU',
       packages=['cftp'],
+      entry_points={
+          'console_scripts': [
+              's3ftp = cftp.__main__:main'
+          ]
+      },
       install_requires=[
           'boto3',
       ],
