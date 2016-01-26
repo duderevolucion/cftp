@@ -6,7 +6,7 @@ def readme():
 
 
 setup(name='cftp',
-      version='0.1d',
+      version='0.2a',
       description='FTP-like client for interacting with cloud storage',
       url='http://github.com/duderevolucion/cftp',
       author='Dude Revolucion',

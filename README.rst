@@ -101,4 +101,7 @@ using pydoc.
 (2) Added more explanation in README.rst on using the
 command line s3ftp utility.
 
+(3) Fixed an incompatibility with PEP440 versioning.
+
+
 
