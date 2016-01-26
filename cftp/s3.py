@@ -3,6 +3,7 @@ import sys
 import boto3
 import os.path, glob, fnmatch
 from abc import ABCMeta, abstractmethod
+from functools import wraps
 from cftp.base import BaseFtpClient
 import cftp.s3_exceptions as s3e
 from boto3.s3.transfer import S3Transfer
@@ -86,6 +87,8 @@ class S3FtpClient(BaseFtpClient) :
             S3FTPError:  An unanticipated error has arisen.
 
         """
+
+        @wraps(func)
 
         def wrapper( *args, **kwargs) :
 
@@ -246,8 +249,7 @@ class S3FtpClient(BaseFtpClient) :
 
         Repeatedly deletes files whose name match the pattern(s) specified
         in the function arguments.  Note this function only operates
-        on files in the current remote working directory.  Matching
-        files are downloaded to the local working directory.
+        on files in the current remote working directory.  
 
         """
 

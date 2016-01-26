@@ -1,8 +1,9 @@
 #!/usr/local/bin/python3
 import sys
 import os
-import cftp.base_exceptions as bftp_ex
 from abc import ABCMeta, abstractmethod 
+from functools import wraps
+import cftp.base_exceptions as bftp_ex
 
 
 # This code is protected under the GNU General Public License, Version 3.
@@ -71,6 +72,8 @@ class BaseFtpClient :
             BaseFtpError:  Gracefully handle unanticipated errors.
 
         """
+
+        @wraps(func)
 
         def wrapper( *args, **kwargs ) :
 

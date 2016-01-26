@@ -53,6 +53,36 @@ credentials as required by boto3.  See the following URL:
 https://boto3.readthedocs.org/en/latest/guide/quickstart.html#configuration
 
 
+Using the *s3ftp* Command Line Utility
+======================================
+
+The following illustrates using the interactive *s3ftp* command line
+utility.  It assumes the existence of an Amazon S3 bucket, in this
+this case a notional bucket named *com.s3ftp.test*.
+
+The following connects to a bucket, lists its contents,
+changes the remote working directory (in the bucket),
+changes the local working directory, creates a directory
+in the bucket, uploads a file to it, multiple gets several files,
+deletes a file from the bucket, closes the bucket, opens a
+new bucket, lists its contents, and quits.  Below does not
+show s3ftp output.
+
+    s3ftp com.s3ftp.test
+    ls
+    cd dir1/dir2
+    lcd ~
+    mkdir dir3
+    put file1
+    mget f*.txt
+    delete file2
+    close
+    open com.s3ftp2.test2
+    ls
+    close
+    quit
+
+
 Note
 ====
 
@@ -65,10 +95,10 @@ is accessing existing storage (on an ftp server).
 Changes in this Release
 =======================
 
-(1) Added clarification in README file to indicate no support
-for creating or deleting S3 buckets.
+(1) Using functools.wraps to improve docstring readability
+using pydoc.
 
-(2) Added a console script to provide an ftp-like interface
-to Amazon S3 on the command line.
+(2) Added more explanation in README.rst on using the
+command line s3ftp utility.
 
 
