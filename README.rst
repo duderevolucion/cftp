@@ -69,17 +69,29 @@ new bucket, lists its contents, and quits.  Below does not
 show s3ftp output.
 
     s3ftp com.s3ftp.test
+
     ls
+
     cd dir1/dir2
+
     lcd ~
+
     mkdir dir3
+
     put file1
+
     mget f*.txt
+
     delete file2
+
     close
+
     open com.s3ftp2.test2
+
     ls
+
     close
+
     quit
 
 
@@ -91,17 +103,15 @@ of S3 buckets.  It assumes the bucket already exists.  This is
 consistent with behavior of a traditional ftp client in that it
 is accessing existing storage (on an ftp server).
 
+This software has been tested on Linux but not Windows or
+Mac OS platforms.
+
 
 Changes in this Release
 =======================
 
-(1) Using functools.wraps to improve docstring readability
-using pydoc.
-
-(2) Added more explanation in README.rst on using the
-command line s3ftp utility.
-
-(3) Fixed an incompatibility with PEP440 versioning.
-
+Fixed some minor formatting issues in README.rst and
+added a note indicating cftp has not been tested on
+Windows and Mac platforms.
 
 
