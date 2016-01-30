@@ -1,0 +1,6 @@
+{
+    "ServerSideEncryption": "AES256", 
+    "Metadata": {"name": "dude"},
+    "ACL" : "private",
+    "StorageClass": "STANDARD"
+}

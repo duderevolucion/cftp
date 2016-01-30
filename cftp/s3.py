@@ -4,9 +4,10 @@ import boto3
 import os.path, glob, fnmatch
 from abc import ABCMeta, abstractmethod
 from functools import wraps
+import json
+from boto3.s3.transfer import S3Transfer
 from cftp.base import BaseFtpClient
 import cftp.s3_exceptions as s3e
-from boto3.s3.transfer import S3Transfer
 
 
 # This code is protected under the GNU General Public License, Version 3.
@@ -37,13 +38,30 @@ class S3FtpClient(BaseFtpClient) :
     directory within the bucket.  The localWorkingDir attribute refers to
     the current working directory on the local host.
 
+    When constructing an S3FTP object, default S3 object parameters
+    are specified as follows:  First check for the existence of a file
+    in the current working directory called .s3ftp.json.  If that exists,
+    load parameters from the file.  If not, then check for a file of the
+    same name in the user's home directory and load from there.  If the
+    constructor is also called with default parameters, then use those
+    to overwrite any parameters loaded from the .s3ftp.json file.
+
     ISSUE TO CHECK:  See the open method.  What if the loc parameter
-    points to a file rather than a folder?
+    points to a file rather than a folder?  Also, in the exception wrapper,
+    we should not be calling args[0].CommandLine unless we're in interactive
+    mode.  Need to add a flag specifying that we're running in interactive
+    mode.  Also, could improve handling of invalid extraArgs keys and values
+    for the S3 transfer functions.  Note that we do nothing to handle bad
+    values for the extraArgs parameter.
 
     Attributes:
         s3Bucket (boto3.S3Bucket):  object representing Amazon S3 bucket
         s3Client (boto3.client):  used for interacting with Amazon S3
         s3Transfer (boto3.S3Transfer):  transfers to/from S3
+        s3DefaultObjParams (dict):  other parameters for S3 objects
+
+    Raises:
+        S3FTPInvalidObjectParameter 
 
     """
 
@@ -51,14 +69,32 @@ class S3FtpClient(BaseFtpClient) :
     # Initialization and exception handling
     ###################################################################
 
-    def __init__(self,s3DefaultObjArgs=None) :
+    def __init__(self,s3DefaultObjParams=None) :
         """ Create an S3 ftp client."""
 
         super().__init__()
+
         self.s3Bucket = None
         self.s3Client = None
         self.s3Transfer = None
-        self.s3DefaultObjArgs=s3DefaultObjArgs
+
+        # Set default object parameters for S3Transfer from file
+        if os.path.exists('.s3ftp.json' ) :
+            f = '.s3ftp.json'
+        elif os.path.exists( os.path.expanduser('~') + '/.s3ftp.json' ) :
+            f = os.path.expanduser('~') + '/.s3ftp.json' 
+        else :
+            f = None
+        if f != None :
+            self.LoadS3DefaultObjParams( f, isRelative=False )
+
+        # Set default object parameters from constructor argument
+        if s3DefaultObjParams!=None :
+            if self.S3ParamsAreValid(s3DefaultObjParams) :
+                for key,value in s3DefaultObjParams.items() :
+                    self.s3DefaultObjParams[key] = value
+            else :
+                raise s3e.S3FTPInvalidObjectParameter
 
 
     def ExceptionWrapper( func ) :
@@ -70,11 +106,17 @@ class S3FtpClient(BaseFtpClient) :
         Raises: 
             OSError:  A standard python exception indicating an operating
                 system-related exception.
+            ValueError:  A standard python exception.  Here it likely indicates
+                a problem in the extraArgs parameter to the S3 Transfer 
+                download_file and upload_file functions.
             S3FTPNoSuchBucketError:  Attempt to access a non-existent S3 bucket.
             S3FTPNoSuchDirError:  Attempt to access an S3 bucket directory
                 that does not exist.
             S3FTPNoSuchObjectError:  Attempt to access a non-existent object
                 in an S3 bucket.
+            S3FTPInvalidObjectParameter:  An object-related parameter, such
+                as content-type, is not specified correctly or is not
+                a parameter at all.
             S3FTPIsADirectoryError:  Attempting to access an object that
                 is actually a directory.
             S3FTPNoSuchFileError:  Attempting to access a non-existent file
@@ -100,6 +142,10 @@ class S3FtpClient(BaseFtpClient) :
                 print( "OSError:  " + osErr.strerror + " " + osErr.filename )
                 args[0].CommandLine()
 
+            except ValueError as vErr :
+                print( 'ValueError:  probably indicates problem with S3 object parameters.')
+                args[0].CommandLine()
+
             except s3e.S3FTPNoSuchBucketError as e:
                 e.errorLog()
                 args[0].CommandLine()
@@ -109,6 +155,10 @@ class S3FtpClient(BaseFtpClient) :
                 args[0].CommandLine()
 
             except s3e.S3FTPNoSuchObjectError as e:
+                e.errorLog()
+                args[0].CommandLine()
+
+            except s3e.S3FTPInvalidObjectParameter as e:
                 e.errorLog()
                 args[0].CommandLine()
 
@@ -214,6 +264,9 @@ class S3FtpClient(BaseFtpClient) :
         localFile = os.path.basename(fileName)
         localPath = self.localWorkingDir + '/' + localFile
         remotePath = self.AbsolutePath(fileName) 
+        if s3ObjArgs==None :
+            s3ObjArgs = self.s3DefaultObjParams
+        s3ObjArgs = { key:value for key,value in s3ObjArgs.items() if key in S3Transfer.ALLOWED_DOWNLOAD_ARGS }
 
         if self.IsFile( remotePath ) :
             self.s3Transfer.download_file( self.cloudStorageLocation, remotePath, localPath, extra_args=s3ObjArgs )
@@ -367,6 +420,9 @@ class S3FtpClient(BaseFtpClient) :
         localPath = self.localWorkingDir + '/' + fileName
         (localDir,localFile) = os.path.split(localPath)
         remotePath = self.AbsolutePath(localFile) 
+        if s3ObjArgs==None :
+            s3ObjArgs = self.s3DefaultObjParams
+        s3ObjArgs = { key:value for key,value in s3ObjArgs.items() if key in S3Transfer.ALLOWED_UPLOAD_ARGS }
         self.s3Transfer.upload_file( localPath, self.cloudStorageLocation, remotePath, extra_args=s3ObjArgs )
 
 
@@ -483,6 +539,136 @@ class S3FtpClient(BaseFtpClient) :
         if remotePath=='.' : # root folder in bucket
             remotePath = ''
         return remotePath
+
+
+
+    ###################################################################
+    # Methods for specifying/managing S3 object-related parameters
+    ###################################################################
+
+
+    @ExceptionWrapper
+    def LoadS3DefaultObjParams( self, fileName, isRelative=True ) :
+        """Loads default S3 object parameters from a JSON file.
+
+        Loads default S3 object parameters from the specified
+        file.  The file can contain a partial or complete set of
+        S3 object-related parameters.  If it's a partial set, then
+        only overwrite the corresponding object defaults, leaving
+        the others unchanged.  The file is read from the local
+        working directory, unless isRelative is set to False.
+
+        Arguments:
+            fileName (str)       :  file name to read S3 parameters
+            isRelative (boolean) :  file is relative to local working dir
+
+        Raises:
+            OSError
+            S3FTPInvalidObjectParameter
+
+        """
+
+        if isRelative==True :
+            localFile = os.path.basename(fileName)
+            fileName = self.localWorkingDir + '/' + localFile
+        fp = open( fileName, 'r' )
+        s3Params = json.load( fp )
+        fp.close()
+        if self.S3ParamsAreValid( s3Params ) :
+            self.s3DefaultObjParams = s3Params
+        else :
+            raise s3e.S3FTPInvalidObjectParameter
+
+
+    @ExceptionWrapper
+    def SaveS3DefaultObjParams( self, fileName, isRelative=True ) :
+        """Stores default S3 object parameters to a JSON file.
+
+        Save the default S3 object parameters to the specified
+        file in JSON format.  The file is saved to the current
+        local working directory, unless isRelative is set to False.
+
+        Arguments:
+            fileName (str) :        file name to store S3 parameters
+            isRelative (boolean) :  file is relative to local working dir
+
+        Raises:
+            OSError
+
+        """
+
+        if isRelative==True :
+            localFile = os.path.basename(fileName)
+            fileName = self.localWorkingDir + '/' + localFile
+        fp = open( fileName, 'w' )
+        json.dump( self.S3DefaultObjParams,fp )
+        fp.close()
+
+
+    @ExceptionWrapper
+    def GetS3DefaultObjParams(self) :
+        """Returns current default S3 parameters."""
+        
+        return self.s3DefaultObjParams
+
+
+    @ExceptionWrapper
+    def SetS3DefaultObjParams( self, s3Params ) :
+        """Sets current default S3 parameters to user-specified values.
+
+        The s3Params argument is a dictionary that contains either a
+        partial or complete set of S3 object-related parameters.  If it's
+        a partial set, then only overwrite the corresponding object
+        defaults, leaving the others unchanged.  If any of the parameters
+        are invalid, do nothing.
+
+        Arguments:
+            s3Params (dict):  parameters for S3 objects
+
+        Raises:
+            S3FTPInvalidObjectParameter
+
+        """
+
+        if self.S3ParamsAreValid( s3Params ) :
+            for key,value in s3Params.items() :
+                self.s3DefaultObjParams[key] = value
+        else :
+            raise s3e.S3FTPInvalidObjectParameter
+
+
+    @ExceptionWrapper
+    def S3ParamsAreValid( self, s3Params ) :
+        """Auxiliary method:  Check extraArgs for S3Transfer functions.
+
+        Recall that S3Transfer's download and upload file functions
+        each include an extraArgs parameter that allows specification
+        of S3 object-related parameters.  In this function, the
+        s3Params argument is a dictionary that contains either a
+        partial or complete set of S3 object-related parameters.  This
+        method checks that each key represents a valid S3 parameter.
+        It does not check validity of the values.  We rely on Amazon
+        to do that.  This is probably not the best answer for the
+        long term.  Note that Amazon does not seem to expose a simple
+        API to check the values.  If a key is invalid, we alert
+        the user and indicate that it will be ignored.
+
+        Arguments:
+            s3Params (dict):  parameters for S3 objects
+
+        """
+
+        valid = True
+        if s3Params!= None :
+            for key in s3Params.keys():
+                if key not in S3Transfer.ALLOWED_UPLOAD_ARGS and \
+                   key not in S3Transfer.ALLOWED_DOWNLOAD_ARGS :
+                    valid = False
+        return valid
+
+
+
+
 
 
 

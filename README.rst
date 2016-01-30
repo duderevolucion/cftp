@@ -52,6 +52,34 @@ credentials as required by boto3.  See the following URL:
 
 https://boto3.readthedocs.org/en/latest/guide/quickstart.html#configuration
 
+This distribution also includes a file called, *s3ftp.json*.  It
+contains default parameters used when reading or writing objects in
+an S3 bucket.  For example, it can be used to specify if/how
+objects are encrypted or to add metadata to objects.  Edit this
+file to reflect desired default parameters.  Then copy it to your
+home directory and rename to *.s3ftp.json*.  The parameters include
+those allowed in the *extraArgs* argument to the S3Transfer functions
+*download_file* and *upload_file*.
+
+The *S3FtpClient* constructor looks for a *.s3ftp.json* file
+first in the current working directory and then in the user's
+home directory.  If it finds this file, then it loads default
+parameters for S3 objects from there.  The constructor may also
+be called with an argument that specifies default object parameters.
+If so, these are merged with defaults read from the *.s3ftp.json*
+file.  If a particular default is specified in both the
+*.s3ftp.json* file and the constructor argument, then the
+latter takes precedence.
+
+Note that when running s3ftp interactively, it is not yet
+possible to change these parameters without quitting, editing
+*.s3ftp.json*  and restarting.  However, the S3FtpClient class
+does have methods to get and set the default  parameters.
+
+Handling of incorrectly specified defaults is rudimentary
+right now.  
+
+
 
 Using the *s3ftp* Command Line Utility
 ======================================
@@ -110,8 +138,9 @@ Mac OS platforms.
 Changes in this Release
 =======================
 
-Fixed some minor formatting issues in README.rst and
-added a note indicating cftp has not been tested on
-Windows and Mac platforms.
+Added the ability to specify defaults for S3 object
+parameters.  Examples include how the object is encrypted,
+its metadata, access control, and so forth.
+
 
 
