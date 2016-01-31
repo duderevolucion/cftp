@@ -38,6 +38,7 @@ class BaseFtpClient :
         cloudStorageLocation (str):  remote storage location
         localWorkingDir (str):  on the local computer
         remoteWorkingDir (str):  on the remote storage
+        isInteractive (Bool):  running interactively via CommandLine
 
     """
 
@@ -49,12 +50,13 @@ class BaseFtpClient :
     ###################################################################
 
 
-    def __init__(self) :
+    def __init__( self, isInteractive=False ) :
         """ Create an ftp client; no parameters for abstract class."""
 
         self.cloudStorageLocation = None      
         self.localWorkingDir = os.getcwd()
         self.remoteWorkingDir = None
+        self.isInteractive = False
 
 
     def ExceptionWrapper( func ) :
@@ -87,15 +89,12 @@ class BaseFtpClient :
 
             except bftp_ex.BaseFTPInvalidCloudLocation as e :
                 e.errorLog()
-                args[0].CommandLine()
 
             except bftp_ex.BaseFTPInvalidCommand as e :
                 e.errorLog()
-                args[0].CommandLine()
 
             except bftp_ex.BaseFTPError as e :
                 e.errorLog()
-                args[0].CommandLine()
 
         return wrapper
 

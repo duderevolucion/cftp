@@ -142,5 +142,8 @@ Added the ability to specify defaults for S3 object
 parameters.  Examples include how the object is encrypted,
 its metadata, access control, and so forth.
 
+Corrected a flaw in exception handling that would
+have arisen if an exception occurred while running
+in non-interactive mode.
 
 

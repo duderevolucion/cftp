@@ -17,7 +17,7 @@ def main(args=None) :
     if args is None:
         args = sys.argv[1:]
     
-    s3ftp = cftp.s3.S3FtpClient()
+    s3ftp = cftp.s3.S3FtpClient( isInteractive=True )
 
     if len(args) == 0 :
         s3ftp.CommandLine()

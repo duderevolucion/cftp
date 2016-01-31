@@ -69,10 +69,10 @@ class S3FtpClient(BaseFtpClient) :
     # Initialization and exception handling
     ###################################################################
 
-    def __init__(self,s3DefaultObjParams=None) :
+    def __init__( self, isInteractive=False, s3DefaultObjParams=None ) :
         """ Create an S3 ftp client."""
 
-        super().__init__()
+        super().__init__( isInteractive )
 
         self.s3Bucket = None
         self.s3Client = None
@@ -140,47 +140,36 @@ class S3FtpClient(BaseFtpClient) :
 
             except OSError as osErr :
                 print( "OSError:  " + osErr.strerror + " " + osErr.filename )
-                args[0].CommandLine()
 
             except ValueError as vErr :
                 print( 'ValueError:  probably indicates problem with S3 object parameters.')
-                args[0].CommandLine()
 
             except s3e.S3FTPNoSuchBucketError as e:
                 e.errorLog()
-                args[0].CommandLine()
 
             except s3e.S3FTPNoSuchDirError as e:
                 e.errorLog()
-                args[0].CommandLine()
 
             except s3e.S3FTPNoSuchObjectError as e:
                 e.errorLog()
-                args[0].CommandLine()
 
             except s3e.S3FTPInvalidObjectParameter as e:
                 e.errorLog()
-                args[0].CommandLine()
 
             except s3e.S3FTPIsADirectoryError as e:
                 e.errorLog()
-                args[0].CommandLine()
 
             except s3e.S3FTPNoSuchFileError as e:
                 e.errorLog()
-                args[0].CommandLine()
 
             except s3e.S3FTPObjectAlreadyExistsError as e:
                 e.errorLog()
-                args[0].CommandLine()
 
             except s3e.S3FTPDirNotEmptyError as e:
                 e.errorLog()
-                args[0].CommandLine()
 
             except s3e.S3FTPError as e:
                 e.errorLog()
-                args[0].CommandLine()
 
             except :
                 print( "S3Ftp:  Unanticipated Exception\n" )
@@ -677,7 +666,7 @@ class S3FtpClient(BaseFtpClient) :
 #########################################################
 
 if __name__ == '__main__' :
-    s3ftp = S3FtpClient()
+    s3ftp = S3FtpClient( isInteractive=True )
     if len(sys.argv) == 1 :
         s3ftp.CommandLine()
         
