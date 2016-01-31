@@ -191,6 +191,8 @@ class S3FtpClient(BaseFtpClient) :
         Arguments:
             dirName (str):  directory specifier
 
+        No return value.
+
         """
     
         remotePath = self.AbsolutePath(dirName)
@@ -202,7 +204,11 @@ class S3FtpClient(BaseFtpClient) :
 
     @ExceptionWrapper
     def close(self) :
-        """Closes connection to S3 bucket."""
+        """Closes connection to S3 bucket.
+        
+        No return value.
+
+        """
 
         self.cloudStorageLocation = None
         self.s3Bucket = None
@@ -218,6 +224,8 @@ class S3FtpClient(BaseFtpClient) :
         Arguments:
             fileName (str):  file to be deleted
         
+        No return value.
+
         """
 
         remotePath = self.AbsolutePath(fileName) 
@@ -248,6 +256,8 @@ class S3FtpClient(BaseFtpClient) :
             fileName (str):    file to be gotten
             s3ObjArgs (dict):  args for corresponding S3 client operation
 
+        No return value.
+
         """
 
         localFile = os.path.basename(fileName)
@@ -267,7 +277,11 @@ class S3FtpClient(BaseFtpClient) :
 
     @ExceptionWrapper
     def ls(self) :
-        """Lists contents of current working folder in an S3 bucket."""
+        """Lists contents of current working folder in an S3 bucket.
+
+        Returns a list.
+
+        """
 
         try :
             objSummaryIter = self.s3Bucket.objects.filter( Prefix=self.remoteWorkingDir )
@@ -293,6 +307,8 @@ class S3FtpClient(BaseFtpClient) :
         in the function arguments.  Note this function only operates
         on files in the current remote working directory.  
 
+        No return value.
+
         """
 
         remoteFileList = self.ls()
@@ -314,6 +330,8 @@ class S3FtpClient(BaseFtpClient) :
             args (list):       list of files to be gotten
             s3ObjArgs (dict):  args for corresponding S3 client operation
 
+        No return value.
+
         """
 
         remoteFileList = self.ls()
@@ -332,6 +350,8 @@ class S3FtpClient(BaseFtpClient) :
 
         Arguments:
            dirName (str):  directory specifier
+
+        No return value.
 
         """
 
@@ -354,6 +374,8 @@ class S3FtpClient(BaseFtpClient) :
             args (list):       files to be transferred
             s3ObjArgs (dict):  args for corresponding S3 client operation
 
+        No return value.
+
         """
 
         for fpattern in args :
@@ -367,6 +389,8 @@ class S3FtpClient(BaseFtpClient) :
 
         Attributes:
             loc (str):  cloud location to connect with
+
+        No return value.
 
         """
 
@@ -404,6 +428,8 @@ class S3FtpClient(BaseFtpClient) :
             fileName (str):    file to be placed into the cloud
             s3ObjArgs (dict):  args for corresponding S3 client operation
 
+        No return value.
+
         """
 
         localPath = self.localWorkingDir + '/' + fileName
@@ -422,6 +448,8 @@ class S3FtpClient(BaseFtpClient) :
 
         Attributes:  
             dirName (str):  specifies remote directory to be removed.
+
+        No return value.
 
         """
 
@@ -445,6 +473,8 @@ class S3FtpClient(BaseFtpClient) :
         This method assumes loc is a valid S3 location identifier.
         Assumes loc is an absolute path, as returned by the
         AbsolutePath auxiliary function below.
+
+        Returns a boolean.
 
         """
 
@@ -470,6 +500,8 @@ class S3FtpClient(BaseFtpClient) :
         Assumes loc is an absolute path, as returned by the
         AbsolutePath auxiliary function.
 
+        Returns a boolean.
+
         """
 
         objSummaryIter = self.s3Bucket.objects.filter( Prefix=loc )
@@ -487,6 +519,8 @@ class S3FtpClient(BaseFtpClient) :
         This method assumes loc is a valid S3 location identifier.
         Assumes loc is an absolute path, as returned by the
         AbsolutePath auxiliary function.
+
+        Returns a boolean.
 
         """
 
@@ -517,6 +551,8 @@ class S3FtpClient(BaseFtpClient) :
         As distinguished from an absolute path, the absolute
         location of an S3 object is obtained by appending the bucket
         name to the absolute path.  
+
+        Returns a string.
 
         """
 
@@ -555,6 +591,8 @@ class S3FtpClient(BaseFtpClient) :
             OSError
             S3FTPInvalidObjectParameter
 
+        No return value.
+
         """
 
         if isRelative==True :
@@ -584,6 +622,8 @@ class S3FtpClient(BaseFtpClient) :
         Raises:
             OSError
 
+        No return value.
+
         """
 
         if isRelative==True :
@@ -596,7 +636,7 @@ class S3FtpClient(BaseFtpClient) :
 
     @ExceptionWrapper
     def GetS3DefaultObjParams(self) :
-        """Returns current default S3 parameters."""
+        """Returns current default S3 parameters (a dictionary)."""
         
         return self.s3DefaultObjParams
 
@@ -616,6 +656,8 @@ class S3FtpClient(BaseFtpClient) :
 
         Raises:
             S3FTPInvalidObjectParameter
+
+        No return value.
 
         """
 
@@ -644,6 +686,8 @@ class S3FtpClient(BaseFtpClient) :
 
         Arguments:
             s3Params (dict):  parameters for S3 objects
+
+        Returns a boolean.
 
         """
 

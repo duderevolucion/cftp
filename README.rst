@@ -123,8 +123,8 @@ show s3ftp output.
     quit
 
 
-Note
-====
+Notes
+=====
 
 The Amazon S3 client above does not support creation or deletion
 of S3 buckets.  It assumes the bucket already exists.  This is
@@ -133,6 +133,12 @@ is accessing existing storage (on an ftp server).
 
 This software has been tested on Linux but not Windows or
 Mac OS platforms.
+
+The S3FtpClient object (and associated s3ftp utility) do not
+provide the ability to examine S3 object parameters, such as
+metadata and content-type.  This could be added in the future
+as an auxiliary (non-ftp) command.
+
 
 
 Changes in this Release
@@ -146,4 +152,6 @@ Corrected a flaw in exception handling that would
 have arisen if an exception occurred while running
 in non-interactive mode.
 
-
+Adjusted comments in s3.py methods to make more
+explicit what they do (or do not) return.  Some minor
+edits to README.
