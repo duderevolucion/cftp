@@ -1,8 +1,8 @@
 #!/usr/local/bin/python3
 import sys
-import os
-from abc import ABCMeta, abstractmethod 
+import os, glob, fnmatch
 from functools import wraps
+from abc import ABCMeta, abstractmethod 
 import cftp.base_exceptions as bftp_ex
 
 
@@ -11,11 +11,99 @@ import cftp.base_exceptions as bftp_ex
 # Author:  Dude Revolucion (dudrevolucion@gmail.com)
 
 
+
+
+###################################################################
+# Exception handling decorator
+###################################################################
+
+def ExceptionWrapper( func ) :
+    """ Adds exception hanndling to instance methods.
+
+    This avoids cluttering individual methods with try/except
+    clauses.
+
+    Raises: 
+        OSError:  A standard python exception indicating an operating
+            system-related exception.
+        ValueError:  A standard python exception.  Here it may indicate
+            a problem in the extraArgs parameter.
+        FTPInvalidCloudLocation:  Attempt to access an invalid
+            cloud location.
+        FTPInvalidCommand:  User entered an invalid ftp command.
+        FTPNoSuchObjectError:  Attempt to access a non-existent object
+            (directory or file) in the cloud
+        FTPNoSuchDirError:  Attempt to access a remote diretcory
+            that does not exist.
+        FTPNoSuchFileError:  Attempt to access a non-existent file
+            in the cloud.
+        FTPIsADirectoryError:  Attempt to access a file that is
+            actually a directory.
+        FTPObjectAlreadyExistsError:  Attempting to create an object
+            (either a file or dircetory) in the cloud, but an object of the
+            same name already exists.
+        FTPDirNotEmptyError:  Expecting an empty directory, but the
+                directory is not actually empty.
+        FTPError:  Gracefully handle unanticipated errors.
+
+    """
+
+    @wraps(func)
+
+    def wrapper( *args, **kwargs ) :
+
+        try :
+            rVal = func( *args, **kwargs )
+            return rVal
+
+        except OSError as osErr :
+            print( "OSError:  " + osErr.strerror + " " + osErr.filename )
+            sys.exit(1)
+
+        except ValueError as vErr :
+            print( 'ValueError:  probably indicates problem with extraArgs parameter.' )
+
+        except bftp_ex.FTPInvalidCloudLocation as e :
+            e.errorLog()
+
+        except bftp_ex.FTPInvalidCommand as e :
+            e.errorLog()
+
+        except bftp_ex.FTPNoSuchObjectError as e:
+            e.errorLog()
+
+        except bftp_ex.FTPNoSuchDirError as e :
+            e.errorLog()
+
+        except bftp_ex.FTPNoSuchFileError as e :
+            e.errorLog()
+
+        except bftp_ex.FTPIsADirectoryError as e :
+            e.errorLog()
+
+        except bftp_ex.FTPObjectAlreadyExistsError as e :
+            e.errorLog()
+
+        except bftp_ex.FTPDirNotEmptyError as e :
+            e.errorLog()
+
+        except bftp_ex.FTPError as e :
+            e.errorLog()
+
+    return wrapper
+
+
+
+
+###################################################################
+# Base Ftp Client class definition
+###################################################################
+
 class BaseFtpClient :
 
     """Emulates basic ftp client functionality to access cloud storage (abstract class).
 
-    This abstract class emulates ftp client functionality in order to access
+    This abstract class emulates ftp client functionality in order to access an abstract
     cloud storage.  What's abstract in this class is the cloud storage itself.
     In other words, the abstract methods describe general ways of interacting
     with cloud storage, without specifying a particular type of storage.  A subclass
@@ -25,14 +113,15 @@ class BaseFtpClient :
     This class implements processing of basic ftp client commands.  Such commands
     can be accessed programmatically.  They can also be accessed interactively
     on the command line.  Instance methods in this class implement the commands.
-    Most of these instance methods are abstract, since their implementation
-    depends on the cloud provider in use.
+    Abstract helper methods encapsulate specific functionality associated with
+    particular cloud implementations.
 
-    This class has three instance attributes.  The cloudStorageLocation specifies
+    This class has four instance attributes.  The cloudStorageLocation specifies
     the Internet-accessible location of the root directory of the cloud storage
     location.  The remoteWorkingDir indicates the current working location beneath
     that root directory.  For example, in Amazon S3, the bucket name would be
-    assigned to the cloudStorageLocation.  
+    assigned to the cloudStorageLocation.  The isInteractive attribute indicates
+    whether a client is running interactively via the CommandLine method.
 
     Attributes:
         cloudStorageLocation (str):  remote storage location
@@ -46,7 +135,7 @@ class BaseFtpClient :
 
 
     ###################################################################
-    # Initialization and exception handling
+    # Initialization
     ###################################################################
 
 
@@ -59,46 +148,6 @@ class BaseFtpClient :
         self.isInteractive = False
 
 
-    def ExceptionWrapper( func ) :
-        """ Adds exception hanndling to instance methods.
-
-        This avoids cluttering individual methods with try/except
-        clauses.
-
-        Raises: 
-            OSError:  A standard python exception indicating an operating
-                system-related exception.
-            BaseFtpInvalidCloudLocation:  Attempt to access an invalid
-                cloud location.
-            BaseFtpInvalidCommand:  User entered an invalid ftp command.
-            BaseFtpError:  Gracefully handle unanticipated errors.
-
-        """
-
-        @wraps(func)
-
-        def wrapper( *args, **kwargs ) :
-
-            try :
-                rVal = func( *args, **kwargs )
-                return rVal
-
-            except OSError as osErr :
-                print( "OSError:  " + osErr.strerror + " " + osErr.filename )
-                sys.exit(1)
-
-            except bftp_ex.BaseFTPInvalidCloudLocation as e :
-                e.errorLog()
-
-            except bftp_ex.BaseFTPInvalidCommand as e :
-                e.errorLog()
-
-            except bftp_ex.BaseFTPError as e :
-                e.errorLog()
-
-        return wrapper
-
-
 
 
     ###################################################################
@@ -107,162 +156,82 @@ class BaseFtpClient :
 
 
     @ExceptionWrapper
-    @abstractmethod
     def cd( self,dirName ) :
         """ Change cloud directory.
+
+        Probably does not need to be overridden by sublcasses.
 
         Arguments:
             dirName (str):  directory specifier
 
+        No return value.
+
         """
     
-        self.remoteWorkingDir = dirName
-        return 'cd ' + dirName
+        remotePath = self.AbsolutePath(dirName)
+        if self.IsDir(remotePath) :
+            self.remoteWorkingDir = remotePath
+        else :
+            raise bftp_ex.FTPNoSuchDirError
 
 
     @ExceptionWrapper
-    @abstractmethod
     def close( self ) :
-        """ Close connection to cloud storage location."""
-    
+        """Closes a remote connection.
+        
+        May need to be overridden by subclasses.
+
+        No return value.
+
+        """
+
         self.cloudStorageLocation = None
-        return 'close'
+        self.remoteWorkingDir = None
 
 
     @ExceptionWrapper
-    @abstractmethod
     def delete( self,fileName ) :
-        """ Delete cloud file.
+        """ Delete a file from the cloud
+
+        This method is independent of a specific cloud service and
+        probably will not be overridden by subclasses.  The abstract
+        auxiliary method AuxDeleteFromCloud encapsulates functionality
+        to delete a file from a particular cloud implementation.  Subclasses
+        must override that method.
 
         Arguments:
             fileName (str):  file to be deleted
         
+        No return value.
+
+        Raises:
+            FTPIsADirectoryError
+            FTPNoSuchObjectError
+
         """
-    
-        return 'delete ' + fileName
+
+        remotePath = self.AbsolutePath(fileName) 
+
+        if self.IsFile(remotePath) :
+            self.AuxDeleteFromCloud(remotePath)
+        elif self.IsDir(remotePath) : 
+            raise bftp_ex.FTPIsADirectoryError
+        else :
+            raise bftp_ex.FTPNoSuchObjectError
 
 
-    @ExceptionWrapper
     @abstractmethod
-    def get( self,fileName ) :
-        """ Get file from the cloude.
+    def AuxDeleteFromCloud( self, remotePath ) :
+        """ Delete a file from the cloud
+
+        This is an abstract auxiliary method that encapsulates
+        cloud-specific functionality.  Subclasses should override
+        this method.
 
         Arguments:
-            fileName (str):  file to be gotten
-
-        """
-    
-        return 'get ' + fileName
-
-
-    @ExceptionWrapper
-    @abstractmethod
-    def ls( self ) :
-        """ List files in a cloud directory."""
-    
-        return 'ls'
-
-
-    @ExceptionWrapper
-    @abstractmethod
-    def mdelete( self,args ) :
-        """ Multiple delete files from the cloud.
-
-        Arguements:
-            args (list):  list of files to be deleted
-
-        """
-    
-        return 'mdelete ' + str(args)
-
-
-    @ExceptionWrapper
-    @abstractmethod
-    def mget( self,args ) :
-        """ Get multiple files from the cloude.
-
-        Arguments:
-            args (list):  list of files to be gotten
-
-        """
-    
-        return 'mget ' + str(args)
-
-
-    @ExceptionWrapper
-    @abstractmethod
-    def mkdir( self,dirName ) :
-        """Make cloud directory.
-
-        Arguments:
-           dirName (str):  directory specifier
-
-        """
-    
-        return 'mkdir ' + dirName
-
-
-    @ExceptionWrapper
-    @abstractmethod
-    def mput( self,args ) :
-        """ Transfer multiple files from local host to the cloud.
-
-        Attributes:
-            args (list):  files to be transferred
-
-        """
-    
-        return 'mput ' + str(args)
-
-
-    @ExceptionWrapper
-    @abstractmethod
-    def open( self, loc ) :
-        """ Open connection to cloud storage location.
-
-        Attributes:
-            loc (str):  cloud location to connect with
-
-        """
-
-        self.close()
-        self.cloudStorageLocation = None
-        return 'open ' + loc
-
-
-    @ExceptionWrapper
-    @abstractmethod
-    def put( self,fileName ) :
-        """ Put file into the cloud.
-
-        Attributes:
-            fileName (str):  file to be placed into the cloud
-
-        """
-    
-        return 'put ' + fileName
-
-
-    @ExceptionWrapper
-    @abstractmethod
-    def rmdir( self,dirName ) :
-        """ Remove cloud directory.
-
-        Attributes:  
-            dirName (str):  specifies remote directory to be removed.
-
-        """
-    
-        return 'rmdir ' + dirName
-
-
-    @ExceptionWrapper
-    @abstractmethod
-    def IsFile(self,loc) :
-        """ Auxiliary method:  check if specified cloud file location is valid (cloud implementation-specific).
-
-        Arguments:
-            loc (str):  location to check
+            fileName (str):  file to be deleted (absolute path)
+        
+        No return value.
 
         """
 
@@ -270,34 +239,357 @@ class BaseFtpClient :
 
 
     @ExceptionWrapper
-    @abstractmethod
-    def IsDir(self,loc) :
-        """ Auxiliary method:  check of specified cloud location is a directory.
+    def get( self,fileName,extraArgs=None ) :
+        """Downloads a file from remote cloud location.
+
+        Downloads to current working directory.  Does nothing if
+        file parameter is a directory.  Overwrites an existing file
+        of the same name the current working directory.  Note
+        that if parameter fileName includes directories, then the cloud file
+        location is relative to the remote current working directory.
+        Suppose in that case fileName is a/b.txt.  Then the file b.txt
+        is downloaded from rwd/a/b.txt directly to localWorkingDir/b.txt.
+        This method probably does not need to be overridden by
+        subclasses.
 
         Arguments:
-            loc (str):  location to check
+            fileName (str):    file to be gotten
+            extraArgs (dict):  possibly used by subclasses
+
+        No return value.
+
+        Raises:
+            FTPIsADirectoryError
+            FTPNoSuchFileError
 
         """
 
-        return False
+        localFile = os.path.basename(fileName)
+        localPath = self.localWorkingDir + '/' + localFile
+        remotePath = self.AbsolutePath(fileName) 
+
+        if self.IsFile( remotePath ) :
+            self.AuxGetFromCloud(remotePath,localPath,extraArgs)
+        elif self.IsDir( remotePath ) :
+            raise bftp_ex.FTPIsADirectoryError
+        else :
+            raise bftp_ex.FTPNoSuchFileError
+            
+
+    @abstractmethod
+    def AuxGetFromCloud( self, remotePath, localPath, extraArgs ) :
+        """ Get a file from the cloud
+
+        This is an abstract auxiliary method that encapsulates
+        cloud-specific functionality.  Subclasses should override
+        this method.
+
+        Arguments:
+            remotePath (str) : file to be gotten
+            localPath (str)  : where to put it
+            extraArgs (dict) : possibly useful for subclasses
+        
+        No return value.
+
+        """
+
+        pass
+
+
+    @abstractmethod
+    def ls( self ) :
+        """Lists contents of current working folder in cloud folder.
+
+        Returns a list.  Subclasses must override this with a cloud
+        provider-specific implementation.
+
+        """
+
+        pass
 
 
     @ExceptionWrapper
-    @abstractmethod
-    def DirEmpty(self,loc) :
-        """ Auxiliary method:  check if specified directory is empty.
+    def mdelete( self,args ) :
+       """ Deletes multiple files from the cloud.
+
+       Repeatedly deletes files whose name match the pattern(s) specified
+       in the function arguments.  Note this function only operates
+       on files in the current remote working directory.  Subclasses
+       probably do not need to override this method.
+
+       No return value.
+
+       """
+
+       remoteFileList = self.ls()
+       for fpattern in args :
+           for f in fnmatch.filter( remoteFileList, fpattern ) :
+               self.delete(f)
+
+
+    @ExceptionWrapper
+    def mget( self,args,extraArgs=None ) :
+        """ Downloads multiple files from the cloud.
+
+        Repeatedly gets files whose name match the pattern(s) specified
+        in the function arguments.  Note this function only operates
+        on files in the current remote working directory.  Matching
+        files are downloaded to the local working directory.  Subclasses
+        probably do not need to override this method.
 
         Arguments:
-            loc (str):  location to check
+            args (list):       list of files to be gotten
+            extraArgs(dict):   may be used by subclasses
+
+        No return value.
 
         """
 
-        return False
+        remoteFileList = self.ls()
+        for fpattern in args :
+            for f in fnmatch.filter( remoteFileList, fpattern ) :
+                self.get(f,extraArgs)
 
+
+    @ExceptionWrapper
+    def mkdir( self,dirName ) :
+        """Make a directory in the cloud.
+
+        Does nothing if folder or file of this name already exists in the
+        remote working directory.  This method probably does not need
+        to be overridden by subclasses.  However, the abstract auxiliary
+        method AuxMkDirInCloud encapsulates cloud provider-specific functionality
+        for making a directory and would need to be overridden.
+
+        Arguments:
+           dirName (str):  directory specifier
+
+        No return value.
+
+        Raises:
+            FTPObjectAlreadyExistsError
+
+        """
+
+        remotePath = self.AbsolutePath(dirName)
+        
+        if not self.IsDir(remotePath) and not self.IsFile(remotePath) :
+            self.AuxMkDirInCloud(remotePath)
+        else :
+            raise bftp_ex.FTPObjectAlreadyExistsError 
+
+
+    @abstractmethod
+    def AuxMkDirInCloud( self, remotePath ) :
+        """Make a directory in the cloud.
+
+        This is an abstract auxiliary method that encapsulates
+        cloud-specific functionality.  Subclasses should override
+        this method.
+
+        Arguments:
+            remotePath (str) : path for directory to be created
+        
+        No return value.
+
+        """
+
+        pass
+
+
+    @ExceptionWrapper
+    def mput( self,args,extraArgs=None ) :
+        """ Uploads multiple files to dropbox.
+
+        Invokes python's iglob function on the file pattern(s) specified
+        and then repeatedly invokes the put method on the results.  This
+        method probably does not need to be overridden by subclasses.
+
+        Attributes:
+            args (list):       files to be transferred
+            extraArgs(dict):   may be used by subclasses
+
+        No return value.
+
+        """
+
+        for fpattern in args :
+            for f in glob.iglob(fpattern) :
+                self.put(f,extraArgs)
+        
+
+    @abstractmethod
+    def open( self, loc ) :
+        """Opens a connection to dropbox, returning that connection.
+
+        This method does need to be overridden by subclasses.
+
+        Attributes:
+            loc (str):  cloud location to connect with
+
+        No return value.
+
+        """
+
+        pass
+
+
+    @ExceptionWrapper
+    def put( self,fileName,extraArgs=None ) :
+        """Uploads a file to the cloud.
+
+        Overwrites an existing file of the same name in the cloud.
+        Note that parameter fileName may include folders.  If so, the file
+        is uploaded to the current cloud directory.  Probably does
+        not need to be overridden by subclasses.  Cloud provider-
+        specific functionality is encapsulated in abstract auxiliary
+        method AuxPutInCloud, which would need to be overridden.
+
+        Attributes:
+            fileName (str):    file to be placed into the cloud
+            extraArgs (dict):  may be used by subclasses
+
+        No return value.
+
+        """
+
+        localPath = self.localWorkingDir + '/' + fileName
+        (localDir,localFile) = os.path.split(localPath)
+        remotePath = self.AbsolutePath(localFile) 
+        self.AuxPutInCloud( localPath,remotePath,extraArgs )
+
+
+    @abstractmethod
+    def AuxPutInCloud( self, localPath, remotePath, extraArgs ) :
+        """Uploads a file to the cloud.
+
+        This is an abstract auxiliary method that encapsulates
+        cloud-specific functionality.  Subclasses should override
+        this method.
+
+        Arguments:
+            localPath (str)  : file to be transferred to cloud
+            remotePath (str) : where to put it
+            extraArgs (dict) : possibly useful for subclasses
+        
+        No return value.
+
+        """
+
+        pass
+
+
+    @ExceptionWrapper
+    def rmdir( self,dirName ) :
+        """ Remove cloud folder.
+
+        Probably does not need to be overridden by subclasses.  Cloud
+        provider-specific functionality is encapsulated in abstract auxiliary
+        method AuxRmDirFromCloud, which would need to be overridden.
+
+        Attributes:  
+            dirName (str):  specifies remote directory to be removed.
+
+        No return value.
+
+        Raises:
+            FTPDirNotEmptyError
+            FTPNoSuchDirError
+
+        """
+
+        remotePath = self.AbsolutePath(dirName)
+        if self.IsDir(remotePath) :
+            if self.DirEmpty(remotePath) :
+                self.AuxRmDirFromCloud( remotePath )
+                pass
+            else :
+                raise bftp_ex.FTPDirNotEmptyError
+        else :
+            raise bftp_ex.FTPNoSuchDirError
+
+
+    @abstractmethod
+    def AuxRmDirFromCloud( self, remotePath ) :
+        """ Remove cloud folder.
+
+        This is an abstract auxiliary method that encapsulates
+        cloud-specific functionality.  Subclasses should override
+        this method.
+
+        Arguments:
+            remotePath (str) : directory to be removed
+        
+        No return value.
+
+        """
+
+        pass
+
+
+    @abstractmethod
+    def IsDir(self,loc) :
+        """ Auxiliary method:  check if specified cloud location is directory.
+
+        Subclasses must override and implement this method.
+        This method assumes loc is a valid cloud location identifier.
+        Assumes loc is an absolute path, as returned by the
+        AbsolutePath auxiliary function below.
+
+        Returns a boolean.
+
+        """
+
+        pass 
+
+
+    @abstractmethod
+    def IsFile(self,loc) :
+        """ Auxiliary method:  check if specified location is a file
+
+        Subclasses must override and implement this method.
+        This method assumes loc is a valid cloud location identifier.
+        Assumes loc is an absolute path, as returned by the
+        AbsolutePath auxiliary function.
+
+        Returns a boolean.
+
+        """
+
+        pass
+
+
+    @ExceptionWrapper
+    def DirEmpty(self,loc) :
+        """ Auxiliary method:  check if specified directory is empty.
+
+        Subclasses must override and implement this method.        
+        This method assumes loc is a valid cloud location identifier.
+        Assumes loc is an absolute path, as returned by the
+        AbsolutePath auxiliary function.
+
+        Returns a boolean.
+
+        """
+
+        pass
+
+
+    @abstractmethod
+    def AbsolutePath(self,f) :
+        """ Auxiliary method:  transform relative cloud path to absolute path.
+
+        Subclasses should override and implement this method.
+        What constitutes an absolute path may depend on the cloud
+        provider-specific implementation.  
+
+        """
+
+        pass
     
 
     ###################################################################
-    # Methods that do not need to be overriden
+    # Methods that do not interact with any cloud implementation
     ###################################################################
 
     @ExceptionWrapper
@@ -316,7 +608,6 @@ class BaseFtpClient :
         
 
     @ExceptionWrapper
-    @abstractmethod
     def pwd( self ) :
         """ Print and return current cloud working directory."""
     
@@ -370,18 +661,18 @@ class BaseFtpClient :
                 continue
             if self.cloudStorageLocation==None and \
                not line[0] in notNeedValidCloudLocation :
-                raise bftp_ex.BaseFTPInvalidCloudLocation
+                raise bftp_ex.FTPInvalidCloudLocation
             if ftpCmdFctLookupNoArgs.get( line[0] ) != None :
                 rVal = ftpCmdFctLookupNoArgs[ line[0] ]()
             elif ftpCmdFctLookupOneArg.get( line[0] ) != None :
                 if len(line) == 2 :
                     rVal = ftpCmdFctLookupOneArg[ line[0] ](line[1])
                 else :
-                    raise bftp_ex.BaseFTPInvalidCloudLocation
+                    raise bftp_ex.FTPInvalidCloudLocation
             elif ftpCmdFctLookupMultipleArgs.get( line[0] ) != None :
                 rVal = ftpCmdFctLookupMultipleArgs[ line[0] ](line[1:])
             else :
-                raise bftp_ex.BaseFTPInvalidCommand
+                raise bftp_ex.FTPInvalidCommand
             if rVal :
                 print( rVal )
             

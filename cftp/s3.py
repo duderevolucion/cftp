@@ -1,12 +1,10 @@
 #!/usr/local/bin/python3
-import sys
-import boto3
-import os.path, glob, fnmatch
+import sys,boto3,json,os
 from abc import ABCMeta, abstractmethod
 from functools import wraps
-import json
 from boto3.s3.transfer import S3Transfer
-from cftp.base import BaseFtpClient
+from cftp.base import BaseFtpClient,ExceptionWrapper
+import cftp.base_exceptions as bftp_ex
 import cftp.s3_exceptions as s3e
 
 
@@ -14,6 +12,52 @@ import cftp.s3_exceptions as s3e
 # See https://www.gnu.org/copyleft/gpl.html.
 # Author:  Dude Revolucion (dudrevolucion@gmail.com)
 
+
+
+###################################################################
+# Exception handling decorator
+###################################################################
+
+@ExceptionWrapper
+def S3ExceptionWrapper( func ) :
+    """ Adds S3-specific exception hanndling to instance methods.
+
+    This avoids cluttering individual methods with try/except
+    clauses.
+
+    Raises: 
+        S3FTPNoSuchBucketError : Attempt to access non-existent
+            S3 bucket.
+        S3FTPInvalidObjectParameter:  Attempt to specify invalid
+            extraArgs parameter for S3 object.
+
+    """
+
+    @wraps(func)
+
+    def wrapper( *args, **kwargs ) :
+
+        try :
+            rVal = func( *args, **kwargs )
+            return rVal
+
+        except s3e.S3FTPNoSuchBucketError as e :
+            e.errorLog()
+
+        except s3e.S3FTPInvalidObjectParameter as e :
+            e.errorLog()
+
+        except :
+            raise
+
+    return wrapper
+
+
+
+
+###################################################################
+# Base Ftp Client class definition
+###################################################################
 
 class S3FtpClient(BaseFtpClient) :
     """Emulates basic ftp client functionality to access Amazon S3 cloud storage.
@@ -25,7 +69,7 @@ class S3FtpClient(BaseFtpClient) :
     and interactively (via the command line).  Instance methods in this class
     implement the commands. 
 
-    Recall the superclass (BaseFtpClient) has three instance attributes.
+    Recall the superclass (BaseFtpClient) has four instance attributes.
     In this subclass, cloudStorageLocation is a string that refers to
     the location of the Amazon S3 bucket.  The remoteWorkingDir attribute
     refers to a location within that bucket.  It can either be a directory
@@ -36,7 +80,9 @@ class S3FtpClient(BaseFtpClient) :
     remoteWorkingDir to None.  The open method sets it to either the bucket's
     root directory (the empty string) or to some other user-specified
     directory within the bucket.  The localWorkingDir attribute refers to
-    the current working directory on the local host.
+    the current working directory on the local host.  The isInteractive
+    attribute indicates whether we're interacting with Amazon S3 using
+    the CommandLine method in the BaseFtpClient superclass.
 
     When constructing an S3FTP object, default S3 object parameters
     are specified as follows:  First check for the existence of a file
@@ -47,21 +93,18 @@ class S3FtpClient(BaseFtpClient) :
     to overwrite any parameters loaded from the .s3ftp.json file.
 
     ISSUE TO CHECK:  See the open method.  What if the loc parameter
-    points to a file rather than a folder?  Also, in the exception wrapper,
-    we should not be calling args[0].CommandLine unless we're in interactive
-    mode.  Need to add a flag specifying that we're running in interactive
-    mode.  Also, could improve handling of invalid extraArgs keys and values
-    for the S3 transfer functions.  Note that we do nothing to handle bad
-    values for the extraArgs parameter.
+    points to a file rather than a folder?  Also, could improve handling
+    of invalid extraArgs keys and values for the S3 transfer functions.
+    Note that we do nothing to handle bad values for the extraArgs parameter.
+    Also the mget, mput, and mdelete methods each handles the situation
+    where the file name pattern includes a directory, but they do a
+    poor job of informing the user.
 
     Attributes:
-        s3Bucket (boto3.S3Bucket):  object representing Amazon S3 bucket
-        s3Client (boto3.client):  used for interacting with Amazon S3
-        s3Transfer (boto3.S3Transfer):  transfers to/from S3
-        s3DefaultObjParams (dict):  other parameters for S3 objects
-
-    Raises:
-        S3FTPInvalidObjectParameter 
+        s3Bucket (boto3.S3Bucket)     :  object representing Amazon S3 bucket
+        s3Client (boto3.client)       :  used for interacting with Amazon S3
+        s3Transfer (boto3.S3Transfer) :  transfers to/from S3
+        s3DefaultObjParams (dict)     :  other parameters for S3 objects
 
     """
 
@@ -77,6 +120,7 @@ class S3FtpClient(BaseFtpClient) :
         self.s3Bucket = None
         self.s3Client = None
         self.s3Transfer = None
+        self.s3DefaultObjParams = None
 
         # Set default object parameters for S3Transfer from file
         if os.path.exists('.s3ftp.json' ) :
@@ -95,88 +139,7 @@ class S3FtpClient(BaseFtpClient) :
                     self.s3DefaultObjParams[key] = value
             else :
                 raise s3e.S3FTPInvalidObjectParameter
-
-
-    def ExceptionWrapper( func ) :
-        """ Adds exception handling to instance methods.
-
-        This avoids cluttering individual methods with try/except
-        clauses.
-
-        Raises: 
-            OSError:  A standard python exception indicating an operating
-                system-related exception.
-            ValueError:  A standard python exception.  Here it likely indicates
-                a problem in the extraArgs parameter to the S3 Transfer 
-                download_file and upload_file functions.
-            S3FTPNoSuchBucketError:  Attempt to access a non-existent S3 bucket.
-            S3FTPNoSuchDirError:  Attempt to access an S3 bucket directory
-                that does not exist.
-            S3FTPNoSuchObjectError:  Attempt to access a non-existent object
-                in an S3 bucket.
-            S3FTPInvalidObjectParameter:  An object-related parameter, such
-                as content-type, is not specified correctly or is not
-                a parameter at all.
-            S3FTPIsADirectoryError:  Attempting to access an object that
-                is actually a directory.
-            S3FTPNoSuchFileError:  Attempting to access a non-existent file
-                in an S3 bucket.
-            S3FTPObjectAlreadyExistsError:  Attempting to create an object
-                (either file or directory) in an S3 bucket, but an object
-                of the same name already exists.
-            S3FTPDirNotEmptyError:  Expecting an emtpy directory, but the
-                the directory is not actually empty.
-            S3FTPError:  An unanticipated error has arisen.
-
-        """
-
-        @wraps(func)
-
-        def wrapper( *args, **kwargs) :
-
-            try :
-                rVal = func( *args, **kwargs) 
-                return rVal 
-
-            except OSError as osErr :
-                print( "OSError:  " + osErr.strerror + " " + osErr.filename )
-
-            except ValueError as vErr :
-                print( 'ValueError:  probably indicates problem with S3 object parameters.')
-
-            except s3e.S3FTPNoSuchBucketError as e:
-                e.errorLog()
-
-            except s3e.S3FTPNoSuchDirError as e:
-                e.errorLog()
-
-            except s3e.S3FTPNoSuchObjectError as e:
-                e.errorLog()
-
-            except s3e.S3FTPInvalidObjectParameter as e:
-                e.errorLog()
-
-            except s3e.S3FTPIsADirectoryError as e:
-                e.errorLog()
-
-            except s3e.S3FTPNoSuchFileError as e:
-                e.errorLog()
-
-            except s3e.S3FTPObjectAlreadyExistsError as e:
-                e.errorLog()
-
-            except s3e.S3FTPDirNotEmptyError as e:
-                e.errorLog()
-
-            except s3e.S3FTPError as e:
-                e.errorLog()
-
-            except :
-                print( "S3Ftp:  Unanticipated Exception\n" )
-                sys.exit(1)
-
-        return wrapper
-
+                
 
 
     ###################################################################
@@ -184,25 +147,7 @@ class S3FtpClient(BaseFtpClient) :
     ###################################################################
 
 
-    @ExceptionWrapper
-    def cd( self,dirName ) :
-        """ Change current directory in the Amazon S3 bucket.
-
-        Arguments:
-            dirName (str):  directory specifier
-
-        No return value.
-
-        """
-    
-        remotePath = self.AbsolutePath(dirName)
-        if self.IsDir(remotePath) :
-            self.remoteWorkingDir = remotePath
-        else :
-            raise s3e.S3FTPNoSuchDirError
-
-
-    @ExceptionWrapper
+    @S3ExceptionWrapper
     def close(self) :
         """Closes connection to S3 bucket.
         
@@ -210,72 +155,54 @@ class S3FtpClient(BaseFtpClient) :
 
         """
 
-        self.cloudStorageLocation = None
+        super().close()
         self.s3Bucket = None
         self.s3Client = None
         self.s3Transfer = None
-        self.remoteWorkingDir = None
 
 
-    @ExceptionWrapper
-    def delete( self, fileName ) :
+
+    @S3ExceptionWrapper
+    def AuxDeleteFromCloud( self, remotePath ) :
         """ Delete a file from Amazon S3 bucket.
 
         Arguments:
-            fileName (str):  file to be deleted
+            remotePath (str):  path to file to be deleted
         
         No return value.
 
         """
 
-        remotePath = self.AbsolutePath(fileName) 
-
-        if self.IsFile(remotePath) :
-            objs = self.s3Bucket.objects.filter( Prefix=remotePath )
-            objs = [ obj for obj in objs if obj.size > 0 ]
-            objs[0].delete()
-        elif self.IsDir(remotePath) : 
-            raise s3e.S3FTPIsADirectoryError
-        else :
-            raise s3e.S3FTPNoSuchObjectError
+        objs = self.s3Bucket.objects.filter( Prefix=remotePath )
+        objs = [ obj for obj in objs if obj.size > 0 ]
+        objs[0].delete()
 
 
-    @ExceptionWrapper
-    def get( self, fileName, s3ObjArgs=None ) :
+
+    @S3ExceptionWrapper
+    def AuxGetFromCloud( self, remotePath, localPath, extraArgs ) :
         """Downloads a file from an S3 bucket.
 
-        Downloads to current working directory.  Does nothing if
-        file parameter is a directory.  Overwrites an existing file
-        of the same name the current working directory.  Note
-        that if parameter fileName includes directories, then the S3 object
-        location is relative to the remote current working directory.
-        Suppose in that case fileName is a/b.txt.  Then the file b.txt
-        is downloaded directly to localWorkingDir/b.txt.
-
         Arguments:
-            fileName (str):    file to be gotten
+            remotePath (str):  file to be gotten
+            localPath (str) :  where to put it
             s3ObjArgs (dict):  args for corresponding S3 client operation
 
         No return value.
 
         """
 
-        localFile = os.path.basename(fileName)
-        localPath = self.localWorkingDir + '/' + localFile
-        remotePath = self.AbsolutePath(fileName) 
-        if s3ObjArgs==None :
-            s3ObjArgs = self.s3DefaultObjParams
-        s3ObjArgs = { key:value for key,value in s3ObjArgs.items() if key in S3Transfer.ALLOWED_DOWNLOAD_ARGS }
-
-        if self.IsFile( remotePath ) :
-            self.s3Transfer.download_file( self.cloudStorageLocation, remotePath, localPath, extra_args=s3ObjArgs )
-        elif self.IsDir( remotePath ) :
-            raise s3e.S3FTPIsADirectoryError
-        else :
-            raise s3e.S3FTPNoSuchFileError
+        s3ObjArgs = None
+        if self.s3DefaultObjParams :
+            s3ObjArgs = { key:value for key,value in self.s3DefaultObjParams.items() if key in S3Transfer.ALLOWED_DOWNLOAD_ARGS}
+            if extraArgs :
+                s3ObjArgs.update( { key:value for key,value in extraArgs.items() if key in S3Transfer.ALLOWED_DOWNLOAD_ARGS } )
+        elif extraArgs :
+            s3ObjArgs = { key:value for key,value in extraArgs.items() if key in S3Transfer.ALLOWED_DOWNLOAD_ARGS } 
+        self.s3Transfer.download_file( self.cloudStorageLocation, remotePath, localPath, extra_args=s3ObjArgs )
             
 
-    @ExceptionWrapper
+    @S3ExceptionWrapper
     def ls(self) :
         """Lists contents of current working folder in an S3 bucket.
 
@@ -286,104 +213,38 @@ class S3FtpClient(BaseFtpClient) :
         try :
             objSummaryIter = self.s3Bucket.objects.filter( Prefix=self.remoteWorkingDir )
         except :
-            raise s3e.S3FTPError
+            raise bftp_ex.FTPError
         else :
             if self.remoteWorkingDir :
                 objs = { obj.key.replace(self.remoteWorkingDir + '/','',1) for obj in objSummaryIter }
             else :
                 objs = { obj.key.split('/')[0] for obj in objSummaryIter }
             if not objs :
-                raise s3e.S3FTPNoSuchDirError
+                raise bftp_ex.FTPNoSuchDirError
             objs = [ obj.rstrip('/') for obj in (objs - {''}) ]
             objs.sort()
             return objs
         
         
-    @ExceptionWrapper
-    def mdelete( self, args ) :
-        """ Deletes multiple files from an S3 bucket.
 
-        Repeatedly deletes files whose name match the pattern(s) specified
-        in the function arguments.  Note this function only operates
-        on files in the current remote working directory.  
-
-        No return value.
-
-        """
-
-        remoteFileList = self.ls()
-        for fpattern in args :
-            for f in fnmatch.filter( remoteFileList, fpattern ) :
-                self.delete(f)
-    
-
-    @ExceptionWrapper
-    def mget( self, args, s3ObjArgs=None ) :
-        """ Downloads multiple files from an S3 bucket.
-
-        Repeatedly gets files whose name match the pattern(s) specified
-        in the function arguments.  Note this function only operates
-        on files in the current remote working directory.  Matchin
-        files are downloaded to the local working directory.
-
-        Arguments:
-            args (list):       list of files to be gotten
-            s3ObjArgs (dict):  args for corresponding S3 client operation
-
-        No return value.
-
-        """
-
-        remoteFileList = self.ls()
-        for fpattern in args :
-            for f in fnmatch.filter( remoteFileList, fpattern ) :
-                self.get(f,s3ObjArgs)
-
-
-    @ExceptionWrapper
-    @abstractmethod
-    def mkdir( self,dirName ) :
+    @S3ExceptionWrapper
+    def AuxMkDirInCloud( self,remotePath ) :
         """Make a directory in an S3 bucket.
 
         Does nothing if folder or file of this name already exists in the
         remote working directory.
 
         Arguments:
-           dirName (str):  directory specifier
+           remotePath (str):  directory specifier
 
         No return value.
 
         """
 
-        remotePath = self.AbsolutePath(dirName)
-        
-        if not self.IsDir(remotePath) and not self.IsFile(remotePath) :
-            self.s3Bucket.put_object( Key = remotePath + '/' )
-        else :
-            raise s3e.S3FTPObjectAlreadyExistsError 
+        self.s3Bucket.put_object( Key = remotePath + '/' )
 
 
-    @ExceptionWrapper
-    def mput( self, args, s3ObjArgs=None ) :
-        """ Uploads multiple files to an S3 bucket.
-
-        Invokes python's iglob function on the file pattern(s) specified
-        and then repeatedly invokes the put method on the results.  
-
-        Attributes:
-            args (list):       files to be transferred
-            s3ObjArgs (dict):  args for corresponding S3 client operation
-
-        No return value.
-
-        """
-
-        for fpattern in args :
-            for f in glob.iglob(fpattern) :
-                self.put(f,s3ObjArgs)
-        
-
-    @ExceptionWrapper
+    @S3ExceptionWrapper
     def open(self,loc) :
         """Returns an S3 bucket object, stored in s3Bucket.
 
@@ -403,7 +264,7 @@ class S3FtpClient(BaseFtpClient) :
             s3Client = boto3.client('s3')
             s3Transfer = S3Transfer(s3Client)
         except :
-            raise s3e.S3FTPError
+            raise base_ex.FTPError
         else :
             bucket = [ a for a in s3.buckets.all() if a.name==bucketName ]
             if not bucket:
@@ -416,56 +277,49 @@ class S3FtpClient(BaseFtpClient) :
                 self.remoteWorkingDir = bucketFolder
 
 
-    @ExceptionWrapper
-    def put( self, fileName, s3ObjArgs=None ) :
+    @S3ExceptionWrapper
+    def AuxPutInCloud( self, localPath, remotePath, extraArgs ) :
         """Uploads a file to an S3 bucket.
 
-        Overwrites an existing file of the same name in the bucket.
-        Note that parameter f may include folders.  If so, the file
-        is uploaded to the current S3 working directory.
+        This is an auxiliary method that encapsulates S3-specific
+        functionality.  
 
-        Attributes:
-            fileName (str):    file to be placed into the cloud
-            s3ObjArgs (dict):  args for corresponding S3 client operation
-
+        Arguments:
+            localPath (str)  : file to be transferred to cloud
+            remotePath (str) : where to put it
+            extraArgs (dict) : for S3Transfer object
+        
         No return value.
 
         """
 
-        localPath = self.localWorkingDir + '/' + fileName
-        (localDir,localFile) = os.path.split(localPath)
-        remotePath = self.AbsolutePath(localFile) 
-        if s3ObjArgs==None :
-            s3ObjArgs = self.s3DefaultObjParams
-        s3ObjArgs = { key:value for key,value in s3ObjArgs.items() if key in S3Transfer.ALLOWED_UPLOAD_ARGS }
+        s3ObjArgs = None
+        if self.s3DefaultObjParams :
+            s3ObjArgs = { key:value for key,value in self.s3DefaultObjParams.items() if key in S3Transfer.ALLOWED_UPLOAD_ARGS}
+            if extraArgs :
+                s3ObjArgs.update( { key:value for key,value in extraArgs.items() if key in S3Transfer.ALLOWED_UPLOAD_ARGS } )
+        elif extraArgs :
+            s3ObjArgs = { key:value for key,value in extraArgs.items() if key in S3Transfer.ALLOWED_UPLOAD_ARGS } 
         self.s3Transfer.upload_file( localPath, self.cloudStorageLocation, remotePath, extra_args=s3ObjArgs )
 
 
-    @ExceptionWrapper
-    @abstractmethod
-    def rmdir( self,dirName ) :
+    @S3ExceptionWrapper
+    def AuxRmDirFromCloud( self,remotePath ) :
         """ Remove S3 folder.
 
-        Attributes:  
-            dirName (str):  specifies remote directory to be removed.
-
+        Arguments:
+            remotePath (str) : directory to be removed
+        
         No return value.
 
         """
 
-        remotePath = self.AbsolutePath(dirName)
-        if self.IsDir(remotePath) :
-            if self.DirEmpty(remotePath) :
-                objs = self.s3Bucket.objects.filter( Prefix=remotePath ) 
-                objs = [ obj for obj in objs ]
-                objs[0].delete()
-            else :
-                raise s3e.S3FTPDirNotEmptyError
-        else :
-            raise s3e.S3FTPNoSuchDirError
+        objs = self.s3Bucket.objects.filter( Prefix=remotePath ) 
+        objs = [ obj for obj in objs ]
+        objs[0].delete()
 
 
-    @ExceptionWrapper
+    @S3ExceptionWrapper
     def IsDir(self,loc) :
         """ Auxiliary method:  check of specified S3 object is a directory.
 
@@ -491,7 +345,7 @@ class S3FtpClient(BaseFtpClient) :
             return False
 
 
-    @ExceptionWrapper
+    @S3ExceptionWrapper
     def IsFile(self,loc) :
         """ Auxiliary method:  check if specified S3 file object is valid.
 
@@ -512,7 +366,7 @@ class S3FtpClient(BaseFtpClient) :
             return False
 
 
-    @ExceptionWrapper
+    @S3ExceptionWrapper
     def DirEmpty(self,loc) :
         """ Auxiliary method:  check if specified directory is empty.
 
@@ -532,10 +386,10 @@ class S3FtpClient(BaseFtpClient) :
             else :
                 return False
         else :
-            raise s3e.S3FTPNoSuchDirError
+            raise base_ex.FTPNoSuchDirError
 
 
-    @ExceptionWrapper
+    @S3ExceptionWrapper
     def AbsolutePath(self,f) :
         """ Auxiliary method:  transform relative path to absolute path.
 
@@ -572,7 +426,7 @@ class S3FtpClient(BaseFtpClient) :
     ###################################################################
 
 
-    @ExceptionWrapper
+    @S3ExceptionWrapper
     def LoadS3DefaultObjParams( self, fileName, isRelative=True ) :
         """Loads default S3 object parameters from a JSON file.
 
@@ -589,7 +443,7 @@ class S3FtpClient(BaseFtpClient) :
 
         Raises:
             OSError
-            S3FTPInvalidObjectParameter
+            FTPInvalidObjectParameter
 
         No return value.
 
@@ -607,7 +461,7 @@ class S3FtpClient(BaseFtpClient) :
             raise s3e.S3FTPInvalidObjectParameter
 
 
-    @ExceptionWrapper
+    @S3ExceptionWrapper
     def SaveS3DefaultObjParams( self, fileName, isRelative=True ) :
         """Stores default S3 object parameters to a JSON file.
 
@@ -634,14 +488,14 @@ class S3FtpClient(BaseFtpClient) :
         fp.close()
 
 
-    @ExceptionWrapper
+    @S3ExceptionWrapper
     def GetS3DefaultObjParams(self) :
         """Returns current default S3 parameters (a dictionary)."""
         
         return self.s3DefaultObjParams
 
 
-    @ExceptionWrapper
+    @S3ExceptionWrapper
     def SetS3DefaultObjParams( self, s3Params ) :
         """Sets current default S3 parameters to user-specified values.
 
@@ -668,7 +522,7 @@ class S3FtpClient(BaseFtpClient) :
             raise s3e.S3FTPInvalidObjectParameter
 
 
-    @ExceptionWrapper
+    @S3ExceptionWrapper
     def S3ParamsAreValid( self, s3Params ) :
         """Auxiliary method:  Check extraArgs for S3Transfer functions.
 
