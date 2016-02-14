@@ -144,14 +144,11 @@ as an auxiliary (non-ftp) command.
 Changes in this Release
 =======================
 
-Added the ability to specify defaults for S3 object
-parameters.  Examples include how the object is encrypted,
-its metadata, access control, and so forth.
+Rearchitected the internal design of the BaseFtpClient and
+the S3FtpClient.  Moved more implementation-independent functionality
+into the BaseFTPClient.  Created abstract methods in the base
+client that can be overridden to implement functionality
+specific to Amazon S3 or other cloud providers.
 
-Corrected a flaw in exception handling that would
-have arisen if an exception occurred while running
-in non-interactive mode.
-
-Adjusted comments in s3.py methods to make more
-explicit what they do (or do not) return.  Some minor
-edits to README.
+Made some internal bug fixes to handling of the extraArgs
+parameters in the S3FtpClient.
